@@ -226,6 +226,46 @@ const updateOrderStatus = async (req, res) => {
     }
 };
 
+const getOnlineOrders = async (req, res) => {
+    try {
+        // التحقق إن الصيدلاني عنده وردية مفتوحة
+        const activeShift = await prisma.shift.findFirst({
+            where: { pharmacistId: req.user.id, status: 'open' }
+        });
+
+        const { status } = req.query;
+        const statusFilter = status
+            ? [status]
+            : ['pending', 'processing'];
+
+        const orders = await prisma.order.findMany({
+            where: {
+                orderType: 'ONLINE',
+                status: { in: statusFilter }
+            },
+            include: {
+                customer: { select: { name: true, phone: true, address: true } },
+                pharmacist: { select: { name: true } },
+                items: {
+                    include: {
+                        product: { select: { name: true, barcode: true, sellingPrice: true } }
+                    }
+                }
+            },
+            orderBy: { createdAt: 'asc' } // الأقدم أولاً (FIFO)
+        });
+
+        res.status(200).json({
+            success: true,
+            hasActiveShift: !!activeShift,
+            count: orders.length,
+            data: orders
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 const getTodaySales = async (req, res) => {
     try {
         const startOfDay = new Date();
@@ -326,4 +366,4 @@ const settlePendingInvoice = async (req, res) => {
     }
 };
 
-module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus, getTodaySales, settlePendingInvoice };
+module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus, getTodaySales, settlePendingInvoice, getOnlineOrders };

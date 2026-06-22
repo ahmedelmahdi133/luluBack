@@ -167,4 +167,70 @@ const uploadProductImage = async (req, res) => {
     }
 };
 
-module.exports = { createProduct, getProducts, getProductById, updateProduct, deleteProduct, uploadProductImage };
+// @desc    Get Shortages Insights (Products with stock <= minStockAlert + their monthly sales rate)
+const getShortagesInsights = async (req, res) => {
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        // 1. Fetch monthly sales (OrderItems) first to find what actually sold
+        const recentOrderItems = await prisma.orderItem.groupBy({
+            by: ['productId'],
+            where: {
+                order: {
+                    createdAt: { gte: thirtyDaysAgo },
+                    status: 'completed'
+                }
+            },
+            _sum: {
+                quantity: true
+            }
+        });
+
+        if (!recentOrderItems.length) {
+            return res.status(200).json({ success: true, count: 0, data: [] });
+        }
+
+        const salesMap = {};
+        const soldProductIds = [];
+        recentOrderItems.forEach(item => {
+            salesMap[item.productId] = item._sum.quantity || 0;
+            soldProductIds.push(item.productId);
+        });
+
+        // 2. Fetch products ONLY for those that actually sold AND have low stock (<= 10)
+        const products = await prisma.product.findMany({
+            where: {
+                id: { in: soldProductIds },
+                stockQuantity: { lte: 10 }
+            },
+            select: {
+                id: true,
+                name: true,
+                barcode: true,
+                stockQuantity: true,
+                minStockAlert: true,
+                image: true,
+                purchasingPrice: true,
+                sellingPrice: true
+            },
+            orderBy: { stockQuantity: 'asc' }
+        });
+
+        // 3. Map sales back to products
+        const data = products.map(p => ({
+            ...p,
+            monthlySalesRate: salesMap[p.id] || 0
+        }));
+
+        res.status(200).json({
+            success: true,
+            count: data.length,
+            data
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { createProduct, getProducts, getProductById, updateProduct, deleteProduct, uploadProductImage, getShortagesInsights };

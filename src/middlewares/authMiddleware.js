@@ -28,7 +28,8 @@ const protect = async (req, res, next) => {
                 name: true,
                 email: true,
                 role: true,
-                isActive: true
+                isActive: true,
+                permissions: true
             }
         });
 
@@ -48,6 +49,11 @@ const protect = async (req, res, next) => {
 
 const authorize = (...roles) => {
     return (req, res, next) => {
+        // superadmin has all permissions, bypass role checks
+        if (req.user.role === 'superadmin') {
+            return next();
+        }
+
         if (!roles.includes(req.user.role)) {
             return res.status(403).json({ 
                 message: `صلاحية (${req.user.role}) غير كافية للقيام بهذا الإجراء` 

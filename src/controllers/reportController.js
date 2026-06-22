@@ -199,25 +199,122 @@ const getExpiryAlerts = async (req, res) => {
 
 const getLowStockAlerts = async (req, res) => {
     try {
-        // استعلام مباشر (Raw Query) قوي جداً في PostgreSQL لمقارنة عمودين ببعضهما
+        // استعلام للحصول على العدد الإجمالي أولاً لعدم إرسال داتا ضخمة
+        const countResult = await prisma.$queryRaw`
+            SELECT COUNT(*) as count FROM "Product" 
+            WHERE "stockQuantity" <= "minStockAlert"
+        `;
+        const totalCount = Number(countResult[0]?.count || 0);
+
+        // جلب أول 15 منتج فقط للوحة التحكم
         const lowStockProductsIds = await prisma.$queryRaw`
             SELECT id FROM "Product" 
             WHERE "stockQuantity" <= "minStockAlert"
+            ORDER BY "stockQuantity" ASC
+            LIMIT 15
         `;
         
         const ids = lowStockProductsIds.map(p => p.id);
 
-        const products = await prisma.product.findMany({
-            where: { id: { in: ids } },
-            include: { category: { select: { name: true } } },
-            orderBy: { stockQuantity: 'asc' }
-        });
+        let products = [];
+        if (ids.length > 0) {
+            products = await prisma.product.findMany({
+                where: { id: { in: ids } },
+                include: { category: { select: { name: true } } },
+                orderBy: { stockQuantity: 'asc' }
+            });
+        }
 
         res.status(200).json({
             success: true,
-            count: products.length,
+            count: totalCount,
             data: products
         });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const getShortagesAnalysis = async (req, res) => {
+    try {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        // 1. Fetch products sold today
+        const todayOrders = await prisma.order.findMany({
+            where: {
+                createdAt: { gte: startOfDay },
+                status: { in: ['completed', 'delivered'] }
+            },
+            include: { items: true }
+        });
+
+        const todayProductIds = new Set();
+        todayOrders.forEach(o => o.items.forEach(i => todayProductIds.add(i.productId)));
+
+        // 2. Fetch low stock products
+        const lowStockProductsIds = await prisma.$queryRaw`
+            SELECT id FROM "Product" 
+            WHERE "stockQuantity" <= "minStockAlert"
+        `;
+        const lowStockIds = lowStockProductsIds.map(p => p.id);
+
+        // Combine IDs
+        const relevantProductIds = Array.from(new Set([...todayProductIds, ...lowStockIds]));
+
+        if (relevantProductIds.length === 0) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // 3. Fetch all relevant products
+        const products = await prisma.product.findMany({
+            where: { id: { in: relevantProductIds } },
+            include: { category: { select: { name: true } } }
+        });
+
+        // 4. Fetch their monthly sales
+        const monthlyOrders = await prisma.order.findMany({
+            where: {
+                createdAt: { gte: thirtyDaysAgo },
+                status: { in: ['completed', 'delivered'] },
+                items: { some: { productId: { in: relevantProductIds } } }
+            },
+            include: { items: { where: { productId: { in: relevantProductIds } } } }
+        });
+
+        const monthlySalesMap = {};
+        const todaySalesMap = {};
+
+        monthlyOrders.forEach(o => {
+            const isToday = o.createdAt >= startOfDay;
+            o.items.forEach(i => {
+                monthlySalesMap[i.productId] = (monthlySalesMap[i.productId] || 0) + i.quantity;
+                if (isToday) {
+                    todaySalesMap[i.productId] = (todaySalesMap[i.productId] || 0) + i.quantity;
+                }
+            });
+        });
+
+        // 5. Build result
+        const result = products.map(p => ({
+            id: p.id,
+            name: p.name,
+            barcode: p.barcode,
+            category: p.category?.name || 'Uncategorized',
+            stockQuantity: p.stockQuantity,
+            minStockAlert: p.minStockAlert,
+            soldToday: todaySalesMap[p.id] || 0,
+            soldThisMonth: monthlySalesMap[p.id] || 0,
+            isLowStock: p.stockQuantity <= p.minStockAlert
+        }));
+
+        // sort by soldToday descending, then by low stock
+        result.sort((a, b) => b.soldToday - a.soldToday || a.stockQuantity - b.stockQuantity);
+
+        res.status(200).json({ success: true, data: result });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -228,5 +325,6 @@ module.exports = {
     getMonthlyReport,
     getTopProducts,
     getExpiryAlerts,
-    getLowStockAlerts
+    getLowStockAlerts,
+    getShortagesAnalysis
 };

@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const path = require('path');
 
 const submitPrescription = async (req, res) => {
     try {
@@ -146,4 +147,28 @@ const reviewPrescription = async (req, res) => {
     }
 };
 
-module.exports = { submitPrescription, getMyPrescriptions, respondToQuote, getAllPrescriptions, reviewPrescription };
+const uploadPrescriptionImage = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No image file uploaded' });
+        }
+
+        const filePath = `/uploads/prescriptions/${req.file.filename}`.replace(/\\/g, '/');
+        const imageUrl = `${req.protocol}://${req.get('host')}${filePath}`;
+
+        res.status(201).json({
+            success: true,
+            data: {
+                image: imageUrl,
+                filename: req.file.filename,
+                mimeType: req.file.mimetype,
+                size: req.file.size,
+                extension: path.extname(req.file.originalname)
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { submitPrescription, getMyPrescriptions, respondToQuote, getAllPrescriptions, reviewPrescription, uploadPrescriptionImage };

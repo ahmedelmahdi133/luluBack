@@ -3,7 +3,7 @@ const prisma = require('../config/db');
 // @desc    إنشاء فاتورة شراء من مورد (وإضافة الكميات للمخزون)
 const createPurchase = async (req, res) => {
     try {
-        const { invoiceNumber, supplierId, items, paidAmount } = req.body;
+        const { invoiceNumber, companyInvoiceNumber, supplierId, items, paidAmount } = req.body;
 
         if (!items || items.length === 0) {
             return res.status(400).json({ message: 'الفاتورة لا تحتوي على أدوية' });
@@ -27,6 +27,7 @@ const createPurchase = async (req, res) => {
         const purchase = await prisma.purchase.create({
             data: {
                 invoiceNumber: invoiceNumber || 'PUR-' + Date.now(),
+                companyInvoiceNumber: companyInvoiceNumber || null,
                 supplierId,
                 pharmacistId: req.user.id,
                 totalAmount,
@@ -43,14 +44,19 @@ const createPurchase = async (req, res) => {
             }
         });
 
-        // 3. زيادة المخزون وتحديث سعر الشراء الجديد لكل دواء
+        // 3. زيادة المخزون وتحديث سعر الشراء الجديد والصورة (إن وجدت) لكل دواء
         for (const item of items) {
+            let productUpdateData = {
+                stockQuantity: { increment: item.quantity },
+                purchasingPrice: item.purchasePrice
+            };
+            if (item.image) {
+                productUpdateData.image = item.image;
+            }
+            
             await prisma.product.update({
                 where: { id: item.productId },
-                data: {
-                    stockQuantity: { increment: item.quantity }, // الزيادة
-                    purchasingPrice: item.purchasePrice // تحديث السعر
-                }
+                data: productUpdateData
             });
         }
 

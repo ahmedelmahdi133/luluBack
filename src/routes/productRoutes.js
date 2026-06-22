@@ -9,12 +9,14 @@ const {
     getProductById, // جلب تفاصيل دواء واحد بالـ IDو 
     updateProduct,
     deleteProduct,
-    uploadProductImage
+    uploadProductImage,
+    getShortagesInsights
 } = require('../controllers/productController');
 
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
-const uploadDir = path.join(__dirname, '../../uploads/products');
+const baseUploadDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
+const uploadDir = path.join(baseUploadDir, 'products');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -39,6 +41,7 @@ const upload = multer({
 });
 
 // مسارات العرض
+router.get('/shortages-insights', protect, authorize('admin', 'pharmacist'), getShortagesInsights);
 router.get('/', getProducts);
 router.get('/:id', getProductById); // عرض دواء واحد
 

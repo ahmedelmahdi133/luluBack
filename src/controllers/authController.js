@@ -25,7 +25,8 @@ const sendTokenResponse = (user, statusCode, res) => {
             email: user.email,
             role: user.role,
             phone: user.phone,
-            address: user.address
+            address: user.address,
+            permissions: user.permissions
         }
     });
 };
@@ -176,7 +177,8 @@ const updateProfile = async (req, res) => {
                 email: true,
                 phone: true,
                 address: true,
-                role: true
+                role: true,
+                permissions: true
             }
         });
 

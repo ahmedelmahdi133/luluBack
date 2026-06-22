@@ -13,6 +13,7 @@ datasource db {
 // =======================
 
 enum UserRole {
+  superadmin
   admin
   pharmacist
   customer
@@ -126,6 +127,7 @@ model User {
   address              String?
   isActive             Boolean        @default(true)
   monthlyHourlyRate    Float          @default(0)
+  permissions          Json?
 
   // العلاقات (Relations)
   attendances             Attendance[]
@@ -137,6 +139,7 @@ model User {
   purchases               Purchase[]
   returns                 Return[]
   shifts                  Shift[]
+  notifications           Notification[]
 
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
@@ -201,6 +204,7 @@ model Product {
   orderItems           OrderItem[]
   purchaseItems        PurchaseItem[]
   returnItems          ReturnItem[]
+  notifications        Notification[]
 
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
@@ -330,12 +334,14 @@ model OrderItem {
 }
 
 model Purchase {
-  id              String         @id @default(cuid())
-  invoiceNumber   String         @unique
-  supplierId      String
-  supplier        Supplier       @relation(fields: [supplierId], references: [id])
-  pharmacistId    String
-  pharmacist      User           @relation(fields: [pharmacistId], references: [id])
+  id                   String         @id @default(cuid())
+  systemInvoiceNumber  Int            @unique @default(autoincrement())
+  invoiceNumber        String         @unique
+  companyInvoiceNumber String?
+  supplierId           String
+  supplier             Supplier       @relation(fields: [supplierId], references: [id])
+  pharmacistId         String
+  pharmacist           User           @relation(fields: [pharmacistId], references: [id])
   
   items           PurchaseItem[]
   
@@ -445,4 +451,22 @@ model PrescriptionItem {
   productName    String?
   quantity       Int          @default(1)
   price          Float        @default(0)
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  type      String    @default("reminder")
+  title     String
+  message   String
+  productId String?
+  product   Product?  @relation(fields: [productId], references: [id])
+  dueDate   DateTime?
+  isRead    Boolean   @default(false)
+  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, isRead])
 }

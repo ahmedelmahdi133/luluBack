@@ -23,6 +23,7 @@ const storeRoutes = require('./routes/storeRoutes');
 const prescriptionRoutes = require('./routes/prescriptionRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 
@@ -47,6 +48,11 @@ const allowedOrigins = [
     process.env.FRONTEND_URL,
     ...envOrigins
 ].filter(Boolean);
+
+if (process.env.DESKTOP_MODE === 'true' && process.env.PORT) {
+    allowedOrigins.push(`http://127.0.0.1:${process.env.PORT}`);
+    allowedOrigins.push(`http://localhost:${process.env.PORT}`);
+}
 
 app.use(cors({
     origin: function (origin, callback) {
@@ -82,8 +88,13 @@ app.use('/api', apiLimiter);
 // =========================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// const xss = require('xss-clean');
+// app.use(xss());
+
 app.use(cookieParser());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+const baseUploadDir = process.env.UPLOADS_DIR || path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(baseUploadDir));
 
 // =========================
 // 3. API Routes
@@ -120,6 +131,7 @@ app.use('/api/store', storeRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // =========================
 // Desktop App - Serve Frontend

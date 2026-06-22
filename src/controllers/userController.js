@@ -14,6 +14,7 @@ const getUsers = async (req, res) => {
                 phone: true,
                 role: true,
                 isActive: true,
+                permissions: true,
                 createdAt: true
             },
             orderBy: {
@@ -70,4 +71,32 @@ const deleteUser = async (req, res) => {
     }
 };
 
-module.exports = { getUsers, deleteUser };
+// @desc    Update user permissions
+// @route   PUT /api/users/:id/permissions
+// @access  Private/SuperAdmin
+const updateUserPermissions = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { permissions } = req.body;
+
+        const userExists = await prisma.user.findUnique({ where: { id } });
+        if (!userExists) {
+            return res.status(404).json({ message: 'المستخدم غير موجود' });
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id },
+            data: { permissions }
+        });
+
+        res.status(200).json({ 
+            success: true, 
+            message: 'تم تحديث الصلاحيات بنجاح',
+            data: updatedUser.permissions 
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { getUsers, deleteUser, updateUserPermissions };

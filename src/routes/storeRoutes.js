@@ -7,7 +7,7 @@ router.get('/products', getStoreProducts);
 router.get('/products/:id', getStoreProduct);
 router.get('/categories', getStoreCategories);
 
-router.post('/orders', protect, authorize('customer'), createOnlineOrder);
-router.get('/orders/my', protect, authorize('customer'), getMyOrders);
+router.post('/orders', protect, authorize('customer', 'admin', 'pharmacist'), createOnlineOrder);
+router.get('/orders/my', protect, authorize('customer', 'admin', 'pharmacist'), getMyOrders);
 
 module.exports = router;
