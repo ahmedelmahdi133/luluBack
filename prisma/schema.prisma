@@ -118,16 +118,16 @@ enum ShiftStatus {
 // =======================
 
 model User {
-  id                   String         @id @default(cuid())
-  name                 String
-  email                String         @unique
-  password             String
-  phone                String?
-  role                 UserRole       @default(customer)
-  address              String?
-  isActive             Boolean        @default(true)
-  monthlyHourlyRate    Float          @default(0)
-  permissions          Json?
+  id                String   @id @default(cuid())
+  name              String
+  email             String   @unique
+  password          String
+  phone             String?
+  role              UserRole @default(customer)
+  address           String?
+  isActive          Boolean  @default(true)
+  monthlyHourlyRate Float    @default(0)
+  permissions       Json?
 
   // العلاقات (Relations)
   attendances             Attendance[]
@@ -140,74 +140,76 @@ model User {
   returns                 Return[]
   shifts                  Shift[]
   notifications           Notification[]
+  monthlySubscriptions    MonthlySubscription[] @relation("CustomerSubscriptions")
 
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([email], type: Hash)
 }
 
 model Attendance {
-  id          String           @id @default(cuid())
-  employeeId  String
-  employee    User             @relation(fields: [employeeId], references: [id])
-  date        DateTime
-  checkIn     DateTime
-  checkOut    DateTime?
-  totalHours  Float            @default(0)
-  status      AttendanceStatus @default(present)
-  notes       String?
+  id         String           @id @default(cuid())
+  employeeId String
+  employee   User             @relation(fields: [employeeId], references: [id])
+  date       DateTime
+  checkIn    DateTime
+  checkOut   DateTime?
+  totalHours Float            @default(0)
+  status     AttendanceStatus @default(present)
+  notes      String?
 
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([employeeId, date])
   @@index([date(sort: Desc)])
 }
 
 model Category {
-  id          String    @id @default(cuid())
-  name        String    @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
   image       String?
-  isActive    Boolean   @default(true)
-  
-  products    Product[]
+  isActive    Boolean @default(true)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Product {
-  id                   String           @id @default(cuid())
-  name                 String
-  scientificName       String?
-  barcode              String           @unique
-  description          String?
-  image                String?
-  
-  categoryId           String?
-  category             Category?        @relation(fields: [categoryId], references: [id])
-  
+  id             String  @id @default(cuid())
+  name           String
+  scientificName String?
+  barcode        String  @unique
+  description    String?
+  image          String?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
   purchasingPrice      Float
   sellingPrice         Float
-  stockQuantity        Int              @default(0)
-  minStockAlert        Int              @default(10)
+  stockQuantity        Int      @default(0)
+  minStockAlert        Int      @default(10)
   expiryDate           DateTime
-  requiresPrescription Boolean          @default(false)
-  isAvailableOnline    Boolean          @default(false)
-  unit                 String           @default("قطعة")
-  
-  supplierId           String?
-  supplier             Supplier?        @relation(fields: [supplierId], references: [id])
+  requiresPrescription Boolean  @default(false)
+  isAvailableOnline    Boolean  @default(false)
+  unit                 String   @default("قطعة")
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
 
   orderItems           OrderItem[]
   purchaseItems        PurchaseItem[]
   returnItems          ReturnItem[]
   notifications        Notification[]
+  monthlySubscriptions MonthlySubscription[]
 
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([barcode], type: Hash)
   @@index([name(ops: raw("gin_trgm_ops")), scientificName(ops: raw("gin_trgm_ops")), description(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -217,31 +219,31 @@ model Product {
 }
 
 model Supplier {
-  id        String     @id @default(cuid())
-  name      String
-  company   String
-  phone     String
-  dues      Float      @default(0)
-  
+  id      String @id @default(cuid())
+  name    String
+  company String
+  phone   String
+  dues    Float  @default(0)
+
   products  Product[]
   purchases Purchase[]
 
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Expense {
-  id           String          @id @default(cuid())
-  description  String
-  amount       Float
-  category     ExpenseCategory @default(other)
-  date         DateTime        @default(now())
-  
-  pharmacistId String
-  pharmacist   User            @relation(fields: [pharmacistId], references: [id])
+  id          String          @id @default(cuid())
+  description String
+  amount      Float
+  category    ExpenseCategory @default(other)
+  date        DateTime        @default(now())
 
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  pharmacistId String
+  pharmacist   User   @relation(fields: [pharmacistId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([date(sort: Desc)])
   @@index([pharmacistId, date])
@@ -256,59 +258,61 @@ model Shift {
   startingCash Float       @default(0)
   endingCash   Float?
   expectedCash Float       @default(0)
+  endingVisa   Float?
+  expectedVisa Float       @default(0)
   totalSales   Float       @default(0)
   totalOrders  Int         @default(0)
   totalReturns Float       @default(0)
   status       ShiftStatus @default(open)
   notes        String?
-  
-  orders       Order[]
 
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([pharmacistId, status])
   @@index([startTime])
 }
 
 model Order {
-  id               String        @id @default(cuid())
-  orderNumber      String?       @unique
-  
-  pharmacistId     String?
-  pharmacist       User?         @relation("PharmacistOrders", fields: [pharmacistId], references: [id])
-  
-  customerId       String?
-  customer         User?         @relation("CustomerOrders", fields: [customerId], references: [id])
-  
-  shiftId          String?
-  shift            Shift?        @relation(fields: [shiftId], references: [id])
-  
-  items            OrderItem[]
-  
-  subtotal         Float
-  discountType     DiscountType  @default(fixed)
-  discountValue    Float         @default(0)
-  totalAmount      Float
-  paidAmount       Float         @default(0)
-  dueAmount        Float         @default(0)
-  changeAmount     Float         @default(0)
-  
-  orderType        OrderType
-  status           OrderStatus   @default(completed)
-  paymentMethod    PaymentMethod
-  
-  splitCash        Float         @default(0)
-  splitCard        Float         @default(0)
-  
-  customerPhone    String?
-  deliveryAddress  String?
-  notes            String?
+  id          String  @id @default(cuid())
+  orderNumber String? @unique
 
-  returns          Return[]
+  pharmacistId String?
+  pharmacist   User?   @relation("PharmacistOrders", fields: [pharmacistId], references: [id])
 
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  customerId String?
+  customer   User?   @relation("CustomerOrders", fields: [customerId], references: [id])
+
+  shiftId String?
+  shift   Shift?  @relation(fields: [shiftId], references: [id])
+
+  items OrderItem[]
+
+  subtotal      Float
+  discountType  DiscountType @default(fixed)
+  discountValue Float        @default(0)
+  totalAmount   Float
+  paidAmount    Float        @default(0)
+  dueAmount     Float        @default(0)
+  changeAmount  Float        @default(0)
+
+  orderType     OrderType
+  status        OrderStatus   @default(completed)
+  paymentMethod PaymentMethod
+
+  splitCash Float @default(0)
+  splitCard Float @default(0)
+
+  customerPhone   String?
+  deliveryAddress String?
+  notes           String?
+
+  returns Return[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderNumber], type: Hash)
   @@index([shiftId, status])
@@ -321,78 +325,80 @@ model Order {
 }
 
 model OrderItem {
-  id              String  @id @default(cuid())
-  orderId         String
-  order           Order   @relation(fields: [orderId], references: [id])
-  
-  productId       String
-  product         Product @relation(fields: [productId], references: [id])
-  
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
   productName     String?
   quantity        Int
   priceAtPurchase Float
 }
 
 model Purchase {
-  id                   String         @id @default(cuid())
-  systemInvoiceNumber  Int            @unique @default(autoincrement())
-  invoiceNumber        String         @unique
+  id                   String   @id @default(cuid())
+  systemInvoiceNumber  Int      @unique @default(autoincrement())
+  invoiceNumber        String   @unique
   companyInvoiceNumber String?
   supplierId           String
-  supplier             Supplier       @relation(fields: [supplierId], references: [id])
+  supplier             Supplier @relation(fields: [supplierId], references: [id])
   pharmacistId         String
-  pharmacist           User           @relation(fields: [pharmacistId], references: [id])
-  
-  items           PurchaseItem[]
-  
+  pharmacist           User     @relation(fields: [pharmacistId], references: [id])
+
+  items PurchaseItem[]
+
   totalAmount     Float
+  taxValue        Float          @default(0)
+  discountValue   Float          @default(0)
   paidAmount      Float
   remainingAmount Float          @default(0)
   status          PurchaseStatus @default(paid)
 
-  returns         Return[]
+  returns Return[]
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([invoiceNumber], type: Hash)
 }
 
 model PurchaseItem {
-  id            String   @id @default(cuid())
-  purchaseId    String
-  purchase      Purchase @relation(fields: [purchaseId], references: [id])
-  
-  productId     String
-  product       Product  @relation(fields: [productId], references: [id])
-  
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
   quantity      Int
   purchasePrice Float
 }
 
 model Return {
-  id           String       @id @default(cuid())
-  returnNumber String?      @unique
+  id           String     @id @default(cuid())
+  returnNumber String?    @unique
   returnType   ReturnType
-  
-  orderId      String?
-  order        Order?       @relation(fields: [orderId], references: [id])
-  
-  purchaseId   String?
-  purchase     Purchase?    @relation(fields: [purchaseId], references: [id])
-  
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  purchaseId String?
+  purchase   Purchase? @relation(fields: [purchaseId], references: [id])
+
   pharmacistId String
-  pharmacist   User         @relation(fields: [pharmacistId], references: [id])
-  
-  items        ReturnItem[]
-  
+  pharmacist   User   @relation(fields: [pharmacistId], references: [id])
+
+  items ReturnItem[]
+
   totalRefund  Float
   refundMethod RefundMethod @default(cash)
   notes        String?
   status       ReturnStatus @default(completed)
 
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([returnNumber], type: Hash)
   @@index([returnType])
@@ -400,13 +406,13 @@ model Return {
 }
 
 model ReturnItem {
-  id            String       @id @default(cuid())
-  returnId      String
-  returnRecord  Return       @relation(fields: [returnId], references: [id])
-  
-  productId     String
-  product       Product      @relation(fields: [productId], references: [id])
-  
+  id           String @id @default(cuid())
+  returnId     String
+  returnRecord Return @relation(fields: [returnId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
   productName   String?
   quantity      Int
   priceAtReturn Float
@@ -414,29 +420,29 @@ model ReturnItem {
 }
 
 model Prescription {
-  id                 String             @id @default(cuid())
-  prescriptionNumber String?            @unique
-  
-  customerId         String
-  customer           User               @relation("CustomerPrescriptions", fields: [customerId], references: [id])
-  
-  imageUrl           String
-  notes              String?
-  status             PrescriptionStatus @default(pending)
-  
-  pharmacistId       String?
-  pharmacist         User?              @relation("PharmacistPrescriptions", fields: [pharmacistId], references: [id])
-  
-  pharmacistNotes    String?
-  quotedPrice        Float?
-  
-  items              PrescriptionItem[]
-  
-  customerResponse   CustomerResponse?
-  rejectionReason    String?
+  id                 String  @id @default(cuid())
+  prescriptionNumber String? @unique
 
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  customerId String
+  customer   User   @relation("CustomerPrescriptions", fields: [customerId], references: [id])
+
+  imageUrl String
+  notes    String?
+  status   PrescriptionStatus @default(pending)
+
+  pharmacistId String?
+  pharmacist   User?   @relation("PharmacistPrescriptions", fields: [pharmacistId], references: [id])
+
+  pharmacistNotes String?
+  quotedPrice     Float?
+
+  items PrescriptionItem[]
+
+  customerResponse CustomerResponse?
+  rejectionReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([customerId])
   @@index([status])
@@ -447,10 +453,10 @@ model PrescriptionItem {
   id             String       @id @default(cuid())
   prescriptionId String
   prescription   Prescription @relation(fields: [prescriptionId], references: [id])
-  
-  productName    String?
-  quantity       Int          @default(1)
-  price          Float        @default(0)
+
+  productName String?
+  quantity    Int     @default(1)
+  price       Float   @default(0)
 }
 
 model Notification {
@@ -464,9 +470,38 @@ model Notification {
   product   Product?  @relation(fields: [productId], references: [id])
   dueDate   DateTime?
   isRead    Boolean   @default(false)
-  
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, isRead])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MonthlySubscription {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    User     @relation("CustomerSubscriptions", fields: [customerId], references: [id])
+  
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  
+  startDate   DateTime @default(now())
+  nextDueDate DateTime
+  isActive    Boolean  @default(true)
+  notes       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([nextDueDate])
+  @@index([customerId])
 }

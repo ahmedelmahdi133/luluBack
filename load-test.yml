@@ -1,0 +1,33 @@
+config:
+  target: "http://localhost:5000"
+  phases:
+    - duration: 60       # المرحلة الأولى: إحماء السيرفر لمدة دقيقة
+      arrivalRate: 5     # محاكاة 5 مستخدمين في الثانية
+      name: "Warm up"
+    - duration: 120      # المرحلة الثانية: زيادة الضغط تدريجياً لمدة دقيقتين
+      arrivalRate: 10
+      rampTo: 50         # نصل إلى 50 مستخدم في الثانية
+      name: "Ramp up load"
+    - duration: 180      # المرحلة الثالثة: ضغط عالي وثابت لمدة 3 دقائق
+      arrivalRate: 50
+      name: "Sustained peak load"
+
+scenarios:
+  - name: "مسار العميل المعتاد: تصفح الأدوية وتسجيل الدخول"
+    flow:
+      # 1. تصفح قائمة الأدوية
+      - get:
+          url: "/api/products"
+      - think: 2 # محاكاة تفكير المستخدم لمدة ثانيتين
+
+      # 2. تصفح الأقسام
+      - get:
+          url: "/api/categories"
+      - think: 1
+
+      # 3. محاولة تسجيل الدخول (قم بتعديل الإيميل والباسورد بحساب حقيقي لديك)
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "admin@example.com" 
+            password: "password123"

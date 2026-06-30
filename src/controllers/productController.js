@@ -12,10 +12,35 @@ const cleanObjectIdFields = (body) => {
     return body;
 };
 
+// تحويل أنواع البيانات لتوافق Prisma
+const parseProductData = (body) => {
+    const data = cleanObjectIdFields({ ...body });
+    
+    if (data.purchasingPrice !== undefined && data.purchasingPrice !== '') data.purchasingPrice = parseFloat(data.purchasingPrice);
+    if (data.sellingPrice !== undefined && data.sellingPrice !== '') data.sellingPrice = parseFloat(data.sellingPrice);
+    if (data.stockQuantity !== undefined && data.stockQuantity !== '') data.stockQuantity = parseInt(data.stockQuantity, 10);
+    if (data.minStockAlert !== undefined && data.minStockAlert !== '') data.minStockAlert = parseInt(data.minStockAlert, 10);
+    
+    if (data.expiryDate !== undefined && data.expiryDate !== '') {
+        const parsedDate = new Date(data.expiryDate);
+        if (!isNaN(parsedDate.getTime())) {
+            data.expiryDate = parsedDate;
+        }
+    }
+    
+    if (data.isAvailableOnline === 'true') data.isAvailableOnline = true;
+    if (data.isAvailableOnline === 'false') data.isAvailableOnline = false;
+    
+    if (data.requiresPrescription === 'true') data.requiresPrescription = true;
+    if (data.requiresPrescription === 'false') data.requiresPrescription = false;
+    
+    return data;
+};
+
 // @desc    إضافة دواء جديد للمخزون
 const createProduct = async (req, res) => {
     try {
-        const data = cleanObjectIdFields({ ...req.body });
+        const data = parseProductData(req.body);
 
         const productExists = await prisma.product.findUnique({ 
             where: { barcode: data.barcode } 
@@ -95,7 +120,7 @@ const getProductById = async (req, res) => {
 // @desc    تعديل بيانات دواء
 const updateProduct = async (req, res) => {
     try {
-        const data = cleanObjectIdFields({ ...req.body });
+        const data = parseProductData(req.body);
 
         const exists = await prisma.product.findUnique({ where: { id: req.params.id } });
         if (!exists) {

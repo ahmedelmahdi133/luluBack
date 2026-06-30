@@ -24,6 +24,9 @@ const prescriptionRoutes = require('./routes/prescriptionRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const startReminderCron = require('./cron/reminderCron');
 
 const app = express();
 
@@ -132,6 +135,8 @@ app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 
 // =========================
 // Desktop App - Serve Frontend
@@ -177,6 +182,9 @@ const startServer = async () => {
         await prisma.$connect();
         console.log('✅ Successfully connected to PostgreSQL via Prisma');
         
+        // بدء المهام المجدولة (Cron Jobs)
+        startReminderCron();
+        
         app.listen(PORT, () => {
             console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
         });
@@ -193,6 +201,8 @@ process.on('SIGINT', async () => {
     process.exit(0);
 });
 
-startServer();
+if (require.main === module) {
+    startServer();
+}
 
 module.exports = app;

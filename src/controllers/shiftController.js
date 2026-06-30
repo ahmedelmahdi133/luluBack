@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const nodemailer = require('nodemailer');
 
 const openShift = async (req, res) => {
     try {
@@ -48,10 +49,14 @@ const closeShift = async (req, res) => {
             return res.status(404).json({ message: 'لا توجد وردية مفتوحة حالياً' });
         }
 
-        const { endingCash, notes } = req.body;
+        const { endingCash, endingVisa, notes } = req.body;
 
         if (endingCash === undefined || endingCash < 0) {
             return res.status(400).json({ message: 'يرجى إدخال المبلغ الفعلي في الدرج' });
+        }
+
+        if (endingVisa === undefined || endingVisa < 0) {
+            return res.status(400).json({ message: 'يرجى إدخال مبلغ الفيزا الفعلي' });
         }
 
         // جلب الفواتير المرتبطة بالوردية
@@ -64,16 +69,21 @@ const closeShift = async (req, res) => {
 
         let totalSales = 0;
         let cashSales = 0;
+        let visaSales = 0;
         orders.forEach(order => {
             totalSales += order.totalAmount;
             if (order.paymentMethod === 'cash') {
                 cashSales += order.totalAmount;
+            } else if (order.paymentMethod === 'visa' || order.paymentMethod === 'card') {
+                visaSales += order.totalAmount;
             } else if (order.paymentMethod === 'split') {
                 cashSales += (order.splitCash || 0); // تذكر: قمنا بفصل الـ object في الـ Schema
+                visaSales += (order.splitCard || 0);
             }
         });
 
         const expectedCash = shift.startingCash + cashSales;
+        const expectedVisa = visaSales;
 
         const updatedShift = await prisma.shift.update({
             where: { id: shift.id },
@@ -81,18 +91,75 @@ const closeShift = async (req, res) => {
                 endTime: new Date(),
                 endingCash: Number(endingCash),
                 expectedCash: expectedCash,
+                endingVisa: Number(endingVisa),
+                expectedVisa: expectedVisa,
                 totalSales: totalSales,
                 totalOrders: orders.length,
                 status: 'closed',
                 notes: notes?.trim()
-            }
+            },
+            include: { pharmacist: { select: { name: true } } }
         });
+
+        // Async Email Sending
+        try {
+            const ownerEmailSetting = await prisma.setting.findUnique({ where: { key: 'owner_email' } });
+            if (ownerEmailSetting && ownerEmailSetting.value) {
+                const transporter = nodemailer.createTransport({
+                    host: process.env.SMTP_HOST,
+                    port: process.env.SMTP_PORT,
+                    secure: process.env.SMTP_PORT == 465,
+                    auth: {
+                        user: process.env.SMTP_USER,
+                        pass: process.env.SMTP_PASS
+                    }
+                });
+                
+                const cashDiff = Number(endingCash) - expectedCash;
+                const visaDiff = Number(endingVisa) - expectedVisa;
+                
+                const mailOptions = {
+                    from: `"Pharmacy System" <${process.env.SMTP_USER}>`,
+                    to: ownerEmailSetting.value,
+                    subject: `تقفيل وردية - ${updatedShift.pharmacist?.name || 'صيدلي'}`,
+                    html: `
+                        <h2>تفاصيل تقفيل الوردية</h2>
+                        <ul>
+                            <li><strong>الصيدلي:</strong> ${updatedShift.pharmacist?.name || 'غير معروف'}</li>
+                            <li><strong>بداية الوردية:</strong> ${new Date(shift.startTime).toLocaleString('ar-EG')}</li>
+                            <li><strong>نهاية الوردية:</strong> ${new Date(updatedShift.endTime).toLocaleString('ar-EG')}</li>
+                            <li><strong>عدد الفواتير:</strong> ${orders.length}</li>
+                            <li><strong>إجمالي المبيعات:</strong> ${totalSales.toFixed(2)}</li>
+                        </ul>
+                        <h3>تفاصيل الكاش</h3>
+                        <ul>
+                            <li><strong>الكاش المتوقع:</strong> ${expectedCash.toFixed(2)}</li>
+                            <li><strong>الكاش الفعلي:</strong> ${Number(endingCash).toFixed(2)}</li>
+                            <li><strong>الفرق:</strong> <span style="color: ${cashDiff >= 0 ? 'green' : 'red'}">${cashDiff >= 0 ? '+' : ''}${cashDiff.toFixed(2)}</span></li>
+                        </ul>
+                        <h3>تفاصيل الفيزا</h3>
+                        <ul>
+                            <li><strong>الفيزا المتوقعة:</strong> ${expectedVisa.toFixed(2)}</li>
+                            <li><strong>الفيزا الفعلية:</strong> ${Number(endingVisa).toFixed(2)}</li>
+                            <li><strong>الفرق:</strong> <span style="color: ${visaDiff >= 0 ? 'green' : 'red'}">${visaDiff >= 0 ? '+' : ''}${visaDiff.toFixed(2)}</span></li>
+                        </ul>
+                        ${notes ? `<p><strong>ملاحظات:</strong> ${notes}</p>` : ''}
+                    `
+                };
+                
+                transporter.sendMail(mailOptions).catch(console.error); // send in background
+            }
+        } catch (err) {
+            console.error('Error sending shift closure email:', err);
+        }
+
 
         res.status(200).json({
             success: true,
             data: {
                 ...updatedShift,
-                cashDifference: Number(endingCash) - expectedCash
+                cashDifference: Number(endingCash) - expectedCash,
+                visaDifference: Number(endingVisa) - expectedVisa
             }
         });
     } catch (error) {
@@ -124,13 +191,27 @@ const getCurrentShift = async (req, res) => {
         });
 
         let totalSales = 0;
-        orders.forEach(order => { totalSales += order.totalAmount; });
+        let cashSales = 0;
+        let visaSales = 0;
+        orders.forEach(order => {
+            totalSales += order.totalAmount;
+            if (order.paymentMethod === 'cash') {
+                cashSales += order.totalAmount;
+            } else if (order.paymentMethod === 'visa' || order.paymentMethod === 'card') {
+                visaSales += order.totalAmount;
+            } else if (order.paymentMethod === 'split') {
+                cashSales += (order.splitCash || 0);
+                visaSales += (order.splitCard || 0);
+            }
+        });
 
         res.status(200).json({
             success: true,
             data: {
                 ...shift,
                 totalSales,
+                cashSales,
+                visaSales,
                 totalOrders: orders.length
             }
         });

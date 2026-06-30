@@ -18,24 +18,31 @@ const createOrder = async (req, res) => {
         let subtotal = 0;
         const itemsToSave = [];
 
-        // التأكد من توافر المخزون وحساب الإجمالي
+        // التأكد من توافر المخزون وحساب الإجمالي (بدون N+1 Query)
+        const productIds = orderItems.map(item => item.productId);
+        const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+        const productMap = new Map(products.map(p => [p.id, p]));
+
         for (const item of orderItems) {
-            const product = await prisma.product.findUnique({ where: { id: item.productId } });
+            const product = productMap.get(item.productId);
 
             if (!product) {
                 return res.status(404).json({ message: 'أحد الأدوية غير موجود في قاعدة البيانات' });
             }
-            if (product.stockQuantity < item.quantity) {
+            
+            const qty = parseInt(item.quantity, 10);
+
+            if (product.stockQuantity < qty) {
                 return res.status(400).json({
                     message: `الكمية المتاحة من ${product.name} لا تكفي. المتاح: ${product.stockQuantity}`
                 });
             }
 
-            subtotal += product.sellingPrice * item.quantity;
+            subtotal += product.sellingPrice * qty;
             itemsToSave.push({
                 productId: product.id,
                 productName: product.name,
-                quantity: item.quantity,
+                quantity: qty,
                 priceAtPurchase: product.sellingPrice
             });
         }
@@ -88,8 +95,10 @@ const createOrder = async (req, res) => {
             change = Math.max(0, paid - totalAmount);
         }
 
-        // إنشاء الفاتورة وعناصرها (Nested Write)
-        const order = await prisma.order.create({
+        const prismaOperations = [];
+
+        // عملية إنشاء الفاتورة وعناصرها (Nested Write)
+        const orderCreateOp = prisma.order.create({
             data: {
                 orderNumber: 'ORD-' + Date.now(),
                 pharmacistId: req.user.id,
@@ -114,14 +123,22 @@ const createOrder = async (req, res) => {
             },
             include: { pharmacist: { select: { name: true } } }
         });
+        
+        prismaOperations.push(orderCreateOp);
 
-        // خصم الكميات من المخزون باستخدام خاصية decrement في Prisma
+        // عمليات خصم الكميات من المخزون
         for (const item of itemsToSave) {
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: { stockQuantity: { decrement: item.quantity } }
-            });
+            prismaOperations.push(
+                prisma.product.update({
+                    where: { id: item.productId },
+                    data: { stockQuantity: { decrement: item.quantity } }
+                })
+            );
         }
+
+        // تنفيذ العمليات بشكل متزامن داخل $transaction لضمان صحة البيانات
+        const results = await prisma.$transaction(prismaOperations);
+        const order = results[0];
 
         res.status(201).json({ success: true, data: order });
     } catch (error) {
@@ -146,7 +163,8 @@ const getOrders = async (req, res) => {
             where: whereClause,
             include: {
                 pharmacist: { select: { name: true } },
-                customer: { select: { name: true, phone: true } }
+                customer: { select: { name: true, phone: true } },
+                items: { select: { productName: true, quantity: true, product: { select: { name: true } } } }
             },
             orderBy: { createdAt: 'desc' },
             skip: (Number(page) - 1) * Number(limit),

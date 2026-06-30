@@ -20,15 +20,18 @@ const createSalesReturn = async (req, res) => {
         for (const item of items) {
             const orderItem = order.items.find(oi => oi.productId === item.productId);
             if (!orderItem) return res.status(400).json({ message: 'Item not found in original order' });
-            if (item.quantity > orderItem.quantity) return res.status(400).json({ message: `Return qty exceeds sold qty for ${orderItem.productName || 'item'}` });
+            
+            const qty = parseInt(item.quantity, 10);
+            
+            if (qty > orderItem.quantity) return res.status(400).json({ message: `Return qty exceeds sold qty for ${orderItem.productName || 'item'}` });
 
-            const refundAmount = orderItem.priceAtPurchase * item.quantity;
+            const refundAmount = orderItem.priceAtPurchase * qty;
             totalRefund += refundAmount;
 
             returnItems.push({
                 productId: item.productId,
                 productName: orderItem.productName || orderItem.product?.name || '',
-                quantity: item.quantity,
+                quantity: qty,
                 priceAtReturn: orderItem.priceAtPurchase,
                 reason: item.reason || 'customer_request'
             });
@@ -85,20 +88,23 @@ const createPurchaseReturn = async (req, res) => {
         for (const item of items) {
             const purchaseItem = purchase.items.find(pi => pi.productId === item.productId);
             if (!purchaseItem) return res.status(400).json({ message: 'Item not found in purchase invoice' });
-            if (item.quantity > purchaseItem.quantity) return res.status(400).json({ message: `Return qty exceeds purchased qty` });
+            
+            const qty = parseInt(item.quantity, 10);
+            
+            if (qty > purchaseItem.quantity) return res.status(400).json({ message: `Return qty exceeds purchased qty` });
 
             const product = await prisma.product.findUnique({ where: { id: item.productId } });
-            if (product && product.stockQuantity < item.quantity) {
+            if (product && product.stockQuantity < qty) {
                 return res.status(400).json({ message: `Not enough stock for ${product.name}. Available: ${product.stockQuantity}` });
             }
 
-            const refundAmount = purchaseItem.purchasePrice * item.quantity;
+            const refundAmount = purchaseItem.purchasePrice * qty;
             totalRefund += refundAmount;
 
             returnItems.push({
                 productId: item.productId,
                 productName: purchaseItem.product?.name || product?.name || '',
-                quantity: item.quantity,
+                quantity: qty,
                 priceAtReturn: purchaseItem.purchasePrice,
                 reason: item.reason || 'defective'
             });
@@ -163,16 +169,61 @@ const getReturns = async (req, res) => {
 const searchOrder = async (req, res) => {
     try {
         const { q } = req.query;
-        if (!q) return res.status(400).json({ message: 'Search query required' });
 
+        // If no query, return the latest 15 completed orders
+        if (!q || q.trim() === '') {
+            const orders = await prisma.order.findMany({
+                where: { status: { in: ['completed', 'delivered'] } },
+                include: { items: { include: { product: { select: { name: true, barcode: true } } } } },
+                orderBy: { createdAt: 'desc' },
+                take: 15
+            });
+            return res.status(200).json({ success: true, type: 'multiple', data: orders });
+        }
+
+        const query = q.trim();
+
+        // 1. Try finding by exact Order Number
         const order = await prisma.order.findUnique({
-            where: { orderNumber: q.trim() },
-            include: { items: { include: { product: { select: { name: true } } } } }
+            where: { orderNumber: query },
+            include: { items: { include: { product: { select: { name: true, barcode: true } } } } }
         });
 
-        if (!order) return res.status(404).json({ message: 'Order not found' });
+        if (order) {
+            return res.status(200).json({ success: true, type: 'single', data: order });
+        }
 
-        res.status(200).json({ success: true, data: order });
+        // 2. Try finding by Product Barcode or Name
+        const products = await prisma.product.findMany({
+            where: {
+                OR: [
+                    { barcode: query },
+                    { name: { contains: query, mode: 'insensitive' } }
+                ]
+            }
+        });
+
+        if (products.length > 0) {
+            const productIds = products.map(p => p.id);
+            // Find recent orders containing these products
+            const orders = await prisma.order.findMany({
+                where: {
+                    items: { some: { productId: { in: productIds } } },
+                    status: { in: ['completed', 'delivered'] }
+                },
+                include: { items: { include: { product: { select: { name: true, barcode: true } } } } },
+                orderBy: { createdAt: 'desc' },
+                take: 15
+            });
+
+            if (orders.length > 0) {
+                return res.status(200).json({ success: true, type: 'multiple', data: orders });
+            } else {
+                return res.status(404).json({ message: 'لا توجد فواتير سابقة لهذا الدواء' });
+            }
+        }
+
+        return res.status(404).json({ message: 'لم يتم العثور على الفاتورة أو الدواء' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

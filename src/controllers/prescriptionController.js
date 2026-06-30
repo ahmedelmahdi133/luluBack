@@ -116,7 +116,7 @@ const reviewPrescription = async (req, res) => {
 
         if (status) updateData.status = status;
         if (pharmacistNotes !== undefined) updateData.pharmacistNotes = pharmacistNotes;
-        if (quotedPrice !== undefined) updateData.quotedPrice = quotedPrice;
+        if (quotedPrice !== undefined && quotedPrice !== '') updateData.quotedPrice = parseFloat(quotedPrice);
         if (rejectionReason !== undefined) updateData.rejectionReason = rejectionReason;
 
         // تحديث الأدوية (Items) لو موجودة باستخدام ميزة Prisma Nested Writes
@@ -125,8 +125,8 @@ const reviewPrescription = async (req, res) => {
                 deleteMany: {}, // مسح القديم
                 create: items.map(item => ({
                     productName: item.productName,
-                    quantity: item.quantity || 1,
-                    price: item.price || 0
+                    quantity: parseInt(item.quantity, 10) || 1,
+                    price: parseFloat(item.price) || 0
                 })) // إدخال الجديد
             };
         }
